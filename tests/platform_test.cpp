@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <wcore/log.hpp>
+
 #include <string>
 #include <thread>
 
@@ -43,6 +45,7 @@ TEST_CASE("platform initializes with the null backend", "[platform]")
 
 TEST_CASE("platform init and shutdown are idempotent", "[platform]")
 {
+	wcore::log::LogSilencer silence;
 	PlatformGuard guard;
 
 	wplatform::platform::Config config;
@@ -61,6 +64,7 @@ TEST_CASE("platform init and shutdown are idempotent", "[platform]")
 
 TEST_CASE("platform rejects non-main-thread init", "[platform]")
 {
+	wcore::log::LogSilencer silence;
 	PlatformGuard guard;
 
 	wplatform::platform::Config config;
@@ -80,6 +84,8 @@ TEST_CASE("platform rejects non-main-thread init", "[platform]")
 
 TEST_CASE("unsupported backends fail cleanly", "[platform]")
 {
+	wcore::log::LogSilencer silence;
+
 	if (wplatform::platform::backend_supported(wplatform::platform::Backend::wayland))
 	{
 		SUCCEED("Wayland is supported here; no unavailable backend to test");

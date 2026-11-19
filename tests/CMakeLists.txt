@@ -8,7 +8,14 @@ FetchContent_Declare(Catch2
 	FIND_PACKAGE_ARGS 3 CONFIG
 )
 FetchContent_MakeAvailable(Catch2)
-include(Catch)
+
+if(NOT COMMAND catch_discover_tests)
+	if(DEFINED catch2_SOURCE_DIR AND EXISTS "${catch2_SOURCE_DIR}/extras/Catch.cmake")
+		list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
+	endif()
+
+	include(Catch)
+endif()
 
 # Target
 add_executable(wplatform_tests
@@ -16,6 +23,7 @@ add_executable(wplatform_tests
 	"version_test.cpp"
 	"dependencies_test.cpp"
 	"platform_test.cpp"
+	"window_test.cpp"
 )
 
 target_compile_definitions(wplatform_tests PRIVATE
