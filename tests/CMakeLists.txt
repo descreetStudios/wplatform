@@ -15,6 +15,7 @@ add_executable(wplatform_tests
 	"smoke_test.cpp"
 	"version_test.cpp"
 	"dependencies_test.cpp"
+	"platform_test.cpp"
 )
 
 target_compile_definitions(wplatform_tests PRIVATE

@@ -20,6 +20,7 @@ add_library(wplatform::wplatform ALIAS wplatform)
 
 target_sources(wplatform PRIVATE
 	"src/version.cpp"
+	"src/platform.cpp"
 )
 
 # Version
