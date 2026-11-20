@@ -11,7 +11,7 @@
 
 `wplatform` is a small platform library for C++ projects. It wraps GLFW behind a clean C++20 API: a static library, a single CMake target (`wplatform::wplatform`), and headers under `<wplatform/...>`.
 
-Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor and joystick enumeration with hotplug events, gamepad mappings, custom cursors and cursor modes, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
+Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor and joystick enumeration with hotplug events, gamepad mappings, custom cursors and cursor modes, clipboard access, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
 
 > **Status:** early and evolving. New modules may be added, but the package name, target name, and header layout are intended to remain stable.
 
@@ -95,6 +95,7 @@ target_link_libraries(my_app PRIVATE wplatform::wplatform)
 In both cases the include directories come from the target. Include public headers by their path under `<wplatform/...>`:
 
 ```cpp
+#include <wplatform/clipboard.hpp>
 #include <wplatform/cursor.hpp>
 #include <wplatform/events.hpp>
 #include <wplatform/input.hpp>
@@ -325,6 +326,21 @@ if (wplatform::cursor::raw_motion_supported())
 ```
 
 `cursor::mode(*window)` and `cursor::raw_motion(*window)` read the current values. Raw mouse motion requires platform support and is most useful with `Mode::disabled`. As with all cursor operations, these calls must happen on the main thread while the platform is initialized.
+
+## Clipboard
+
+`clipboard` reads and writes the system clipboard as UTF-8 text:
+
+```cpp
+#include <wplatform/clipboard.hpp>
+
+wplatform::clipboard::set(*window, "copied text");
+
+if (const auto text = wplatform::clipboard::get(*window))
+	std::cout << "clipboard: " << *text << '\n';
+```
+
+`set()` returns `false` if the platform is not initialized on the main thread or the window is no longer valid. `get()` returns `std::nullopt` when the clipboard is empty or its contents cannot be converted to UTF-8, so an empty but readable clipboard produces an empty string in a valid optional. GLFW uses the window handle for platform compatibility; the clipboard itself is system-wide.
 
 ## Events
 

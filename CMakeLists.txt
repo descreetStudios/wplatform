@@ -22,6 +22,7 @@ target_sources(wplatform PRIVATE
 	"src/version.cpp"
 	"src/platform.cpp"
 	"src/events.cpp"
+	"src/clipboard.cpp"
 	"src/cursor.cpp"
 	"src/input.cpp"
 	"src/joystick.cpp"
