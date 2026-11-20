@@ -1,32 +1,24 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 
-#include <wcore/types.hpp>
+#include <wplatform/types.hpp>
 
 struct GLFWwindow;
 
+namespace wplatform::events
+{
+	class Dispatcher;
+}
+
 namespace wplatform::window
 {
-	struct Extent
-	{
-		u32 width;
-		u32 height;
-	};
-
-	struct Position
-	{
-		i32 x;
-		i32 y;
-	};
-
-	struct Scale
-	{
-		f32 x;
-		f32 y;
-	};
+	using wplatform::Extent;
+	using wplatform::Position;
+	using wplatform::Scale;
 
 	struct Config
 	{
@@ -52,6 +44,9 @@ namespace wplatform::window
 
 		bool valid() const noexcept;
 		GLFWwindow* native_handle() const noexcept;
+
+		events::Dispatcher* dispatcher() noexcept;
+		const events::Dispatcher* dispatcher() const noexcept;
 
 		bool should_close() const noexcept;
 		void request_close() noexcept;
@@ -83,10 +78,11 @@ namespace wplatform::window
 		void set_resizable(bool resizable) noexcept;
 
 	private:
-		explicit Window(GLFWwindow* handle) noexcept;
+		explicit Window(GLFWwindow* handle, std::shared_ptr<events::Dispatcher> dispatcher) noexcept;
 
 		void destroy() noexcept;
 
 		GLFWwindow* mHandle{ nullptr };
+		std::shared_ptr<events::Dispatcher> mDispatcher;
 	};
 } // namespace wplatform::window

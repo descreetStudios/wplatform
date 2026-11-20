@@ -5,7 +5,6 @@ FetchContent_Declare(Catch2
 	GIT_REPOSITORY https://github.com/catchorg/Catch2.git
 	GIT_TAG v3.16.1
 	GIT_SHALLOW TRUE
-	FIND_PACKAGE_ARGS 3 CONFIG
 )
 FetchContent_MakeAvailable(Catch2)
 
@@ -23,6 +22,7 @@ add_executable(wplatform_tests
 	"version_test.cpp"
 	"dependencies_test.cpp"
 	"platform_test.cpp"
+	"events_test.cpp"
 	"window_test.cpp"
 )
 

@@ -11,7 +11,7 @@
 
 `wplatform` is a small platform library for C++ projects. It wraps GLFW behind a clean C++20 API: a static library, a single CMake target (`wplatform::wplatform`), and headers under `<wplatform/...>`.
 
-Today it provides platform initialization and backend selection, a move-only RAII window type, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
+Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
 
 > **Status:** early and evolving. New modules may be added, but the package name, target name, and header layout are intended to remain stable.
 
@@ -95,6 +95,7 @@ target_link_libraries(my_app PRIVATE wplatform::wplatform)
 In both cases the include directories come from the target. Include public headers by their path under `<wplatform/...>`:
 
 ```cpp
+#include <wplatform/events.hpp>
 #include <wplatform/platform.hpp>
 #include <wplatform/version.hpp>
 #include <wplatform/window.hpp>
@@ -180,5 +181,56 @@ auto window = wplatform::window::Window::create(config);
 ```
 
 A window can be resized, repositioned, shown or hidden, focused, iconified, restored, and maximized; `size()`, `framebuffer_size()`, `position()`, `content_scale()`, `title()`, and the state queries reflect its current status. Destroy all windows before `platform::shutdown()` — keeping them in an inner scope (as in the example above) makes the order automatic.
+
+## Events
+
+Every window owns an `events::Dispatcher`. Add listeners for one event type, or without a type to receive everything, then process events once per frame with `events::poll()`:
+
+```cpp
+#include <wplatform/events.hpp>
+
+auto* dispatcher = window->dispatcher();
+
+dispatcher->add_listener(wplatform::events::Type::resize,
+	[](const wplatform::events::Event& event)
+	{
+		const auto* resized = event.get<wplatform::events::Resized>();
+		// resized->size.width, resized->size.height
+	});
+
+dispatcher->add_listener([](const wplatform::events::Event& event)
+{
+	// every event
+});
+
+while (!window->should_close())
+{
+	wplatform::events::poll();
+	// render
+}
+```
+
+An `Event` carries a `Type` and a `std::variant` payload, so `get<T>()` returns a pointer only when the payload matches:
+
+| Type | Payload |
+| --- | --- |
+| `close`, `refresh` | none |
+| `focus` | `FocusChanged` |
+| `iconify` | `Iconified` |
+| `maximize` | `Maximized` |
+| `resize`, `framebuffer_resize` | `Resized`, `FramebufferResized` |
+| `move` | `Moved` |
+| `content_scale` | `ContentScaleChanged` |
+| `key` | `KeyEvent` |
+| `char_input` | `CharEvent` |
+| `mouse_button` | `MouseButtonEvent` |
+| `cursor_move` | `CursorMoved` |
+| `cursor_enter` | `CursorEntered` |
+| `scroll` | `Scrolled` |
+| `drop` | `FileDropped` |
+
+Keys, mouse buttons, actions, and modifiers are exposed as `events::Key`, `events::MouseButton`, `events::Action`, and `events::Modifiers`, so application code does not depend on GLFW constants. `add_listener` returns a `ListenerId` for `remove_listener`, `clear()` removes every listener, and `has_listeners(type)` queries the dispatcher.
+
+`events::poll()` returns immediately, while `events::wait()` blocks until an event arrives and `events::wait(timeout)` waits at most `timeout` seconds. All three require an initialized platform on the main thread. Window state changes (resize, move, iconify, maximize) produce events; `request_close()` only sets the close flag, because GLFW reports close events from the window manager. The dispatcher stores itself in the GLFW window user pointer, so avoid calling `glfwSetWindowUserPointer` on a window that uses events. A dispatcher is independent of any window, so it can also be created and dispatched to directly, which is handy for tests.
 
 Headers are opt-in: include only the modules you use, and only those need to compile in a given translation unit.
