@@ -14,3 +14,8 @@ namespace wplatform::monitor::detail
 {
 	void install_callback() noexcept;
 } // namespace wplatform::monitor::detail
+
+namespace wplatform::joystick::detail
+{
+	void install_callback() noexcept;
+} // namespace wplatform::joystick::detail

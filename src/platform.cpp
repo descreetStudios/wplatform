@@ -108,6 +108,7 @@ namespace wplatform::platform
 		gInitialized = true;
 
 		wplatform::monitor::detail::install_callback();
+		wplatform::joystick::detail::install_callback();
 
 		WCORE_INFO("wplatform: initialized (backend '{}', GLFW {})",
 			backend_name(), to_string(glfw_version()));

@@ -26,7 +26,7 @@ namespace wplatform::monitor
 			if (monitors == nullptr)
 				return false;
 
-			for (int i = 0; i < count; ++i)
+			for (int i{ 0 }; i < count; ++i)
 			{
 				if (monitors[i] == handle)
 					return true;
@@ -185,7 +185,7 @@ namespace wplatform::monitor
 		std::vector<VideoMode> result;
 		result.reserve(static_cast<std::size_t>(count));
 
-		for (int i = 0; i < count; ++i)
+		for (int i{ 0 }; i < count; ++i)
 			result.push_back(to_video_mode(modes[i]));
 
 		return result;
@@ -257,7 +257,7 @@ namespace wplatform::monitor
 		std::vector<Monitor> result;
 		result.reserve(static_cast<std::size_t>(count));
 
-		for (int i = 0; i < count; ++i)
+		for (int i{ 0 }; i < count; ++i)
 			result.emplace_back(handles[i]);
 
 		return result;

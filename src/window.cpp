@@ -198,7 +198,7 @@ namespace wplatform::window
 			std::vector<std::string> values;
 			values.reserve(static_cast<std::size_t>(count));
 
-			for (int i = 0; i < count; ++i)
+			for (int i{ 0 }; i < count; ++i)
 			{
 				if (paths != nullptr && paths[i] != nullptr)
 					values.emplace_back(paths[i]);

@@ -11,7 +11,7 @@
 
 `wplatform` is a small platform library for C++ projects. It wraps GLFW behind a clean C++20 API: a static library, a single CMake target (`wplatform::wplatform`), and headers under `<wplatform/...>`.
 
-Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor enumeration with hotplug events, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
+Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor and joystick enumeration with hotplug events, gamepad mappings, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
 
 > **Status:** early and evolving. New modules may be added, but the package name, target name, and header layout are intended to remain stable.
 
@@ -97,6 +97,7 @@ In both cases the include directories come from the target. Include public heade
 ```cpp
 #include <wplatform/events.hpp>
 #include <wplatform/input.hpp>
+#include <wplatform/joystick.hpp>
 #include <wplatform/monitor.hpp>
 #include <wplatform/platform.hpp>
 #include <wplatform/version.hpp>
@@ -225,6 +226,61 @@ window->dispatcher()->add_listener(wplatform::events::Type::monitor_disconnected
 
 All monitor queries require an initialized platform on the main thread, just like window creation.
 
+## Joysticks
+
+`joystick` exposes gamepads and flight sticks without leaking GLFW types. Poll the connected devices once per frame:
+
+```cpp
+#include <wplatform/joystick.hpp>
+
+for (const auto id : wplatform::joystick::connected())
+{
+	if (const auto state = wplatform::joystick::state(id))
+	{
+		// state->axes, state->buttons, state->hats
+
+		if (state->hat(0) & wplatform::joystick::HatUp)
+		{
+			// ...
+		}
+	}
+}
+```
+
+`present(id)`, `name(id)`, and `guid(id)` describe a device, while `state(id)` returns a snapshot of its axes, buttons, and hats. `Id` covers `joy_1` through `joy_16`, and `connected()` returns just the present ones. Hat values are bit masks: `HatUp`, `HatRight`, `HatDown`, `HatLeft`, plus the combined `HatRightUp`, `HatRightDown`, `HatLeftUp`, and `HatLeftDown`. When `platform::Config::joystickHatsAsButtons` is true (the default), hat directions are also included in `state->buttons` after the regular buttons; `state->hats` is always populated.
+
+`is_gamepad(id)`, `gamepad_name(id)`, and `gamepad_state(id)` use the standard gamepad mapping, so buttons and axes can be read by name instead of by raw index:
+
+```cpp
+if (const auto state = wplatform::joystick::gamepad_state(wplatform::joystick::Id::joy_1))
+{
+	if (state->down(wplatform::joystick::GamepadButton::a))
+	{
+		// ...
+	}
+
+	const float move = state->axis(wplatform::joystick::GamepadAxis::left_x);
+}
+```
+
+Add custom SDL_GameControllerDB mappings with `update_mappings()`. Connection changes arrive on every window's dispatcher:
+
+```cpp
+window->dispatcher()->add_listener(wplatform::events::Type::joystick_connected,
+	[](const wplatform::events::Event& event)
+	{
+		const auto* connected = event.get<wplatform::events::JoystickConnected>();
+	});
+
+window->dispatcher()->add_listener(wplatform::events::Type::joystick_disconnected,
+	[](const wplatform::events::Event& event)
+	{
+		const auto* disconnected = event.get<wplatform::events::JoystickDisconnected>();
+	});
+```
+
+Joystick state is global rather than per-window, and every query requires an initialized platform on the main thread.
+
 ## Events
 
 Every window owns an `events::Dispatcher`. Add listeners for one event type, or without a type to receive everything, then process events once per frame with `events::poll()`:
@@ -273,6 +329,8 @@ An `Event` carries a `Type` and a `std::variant` payload, so `get<T>()` returns 
 | `drop` | `FileDropped` |
 | `monitor_connected` | `MonitorConnected` |
 | `monitor_disconnected` | `MonitorDisconnected` |
+| `joystick_connected` | `JoystickConnected` |
+| `joystick_disconnected` | `JoystickDisconnected` |
 
 Keys, mouse buttons, actions, and modifiers are exposed as `events::Key`, `events::MouseButton`, `events::Action`, and `events::Modifiers`, so application code does not depend on GLFW constants. `add_listener` returns a `ListenerId` for `remove_listener`, `clear()` removes every listener, and `has_listeners(type)` queries the dispatcher.
 

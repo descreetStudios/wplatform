@@ -10,6 +10,7 @@
 
 #include <wcore/types.hpp>
 
+#include <wplatform/joystick.hpp>
 #include <wplatform/monitor.hpp>
 #include <wplatform/types.hpp>
 
@@ -35,6 +36,8 @@ namespace wplatform::events
 		drop,
 		monitor_connected,
 		monitor_disconnected,
+		joystick_connected,
+		joystick_disconnected,
 	};
 
 	enum class Action
@@ -295,6 +298,16 @@ namespace wplatform::events
 		std::string name;
 	};
 
+	struct JoystickConnected
+	{
+		joystick::Id id;
+	};
+
+	struct JoystickDisconnected
+	{
+		joystick::Id id;
+	};
+
 	using Payload = std::variant<
 		std::monostate,
 		FocusChanged,
@@ -313,7 +326,9 @@ namespace wplatform::events
 		Scrolled,
 		FileDropped,
 		MonitorConnected,
-		MonitorDisconnected>;
+		MonitorDisconnected,
+		JoystickConnected,
+		JoystickDisconnected>;
 
 	struct Event
 	{

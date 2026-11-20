@@ -24,6 +24,7 @@ add_executable(wplatform_tests
 	"platform_test.cpp"
 	"events_test.cpp"
 	"input_test.cpp"
+	"joystick_test.cpp"
 	"monitor_test.cpp"
 	"window_test.cpp"
 )
