@@ -11,7 +11,7 @@
 
 `wplatform` is a small platform library for C++ projects. It wraps GLFW behind a clean C++20 API: a static library, a single CMake target (`wplatform::wplatform`), and headers under `<wplatform/...>`.
 
-Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
+Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
 
 > **Status:** early and evolving. New modules may be added, but the package name, target name, and header layout are intended to remain stable.
 
@@ -96,6 +96,7 @@ In both cases the include directories come from the target. Include public heade
 
 ```cpp
 #include <wplatform/events.hpp>
+#include <wplatform/input.hpp>
 #include <wplatform/platform.hpp>
 #include <wplatform/version.hpp>
 #include <wplatform/window.hpp>
@@ -231,6 +232,34 @@ An `Event` carries a `Type` and a `std::variant` payload, so `get<T>()` returns 
 
 Keys, mouse buttons, actions, and modifiers are exposed as `events::Key`, `events::MouseButton`, `events::Action`, and `events::Modifiers`, so application code does not depend on GLFW constants. `add_listener` returns a `ListenerId` for `remove_listener`, `clear()` removes every listener, and `has_listeners(type)` queries the dispatcher.
 
-`events::poll()` returns immediately, while `events::wait()` blocks until an event arrives and `events::wait(timeout)` waits at most `timeout` seconds. All three require an initialized platform on the main thread. Window state changes (resize, move, iconify, maximize) produce events; `request_close()` only sets the close flag, because GLFW reports close events from the window manager. The dispatcher stores itself in the GLFW window user pointer, so avoid calling `glfwSetWindowUserPointer` on a window that uses events. A dispatcher is independent of any window, so it can also be created and dispatched to directly, which is handy for tests.
+`events::poll()` returns immediately, while `events::wait()` blocks until an event arrives and `events::wait(timeout)` waits at most `timeout` seconds. All three require an initialized platform on the main thread. Window state changes (resize, move, iconify, maximize) produce events; `request_close()` only sets the close flag, because GLFW reports close events from the window manager. The window uses the GLFW window user pointer to route callbacks, so avoid calling `glfwSetWindowUserPointer` on a window that uses events. A dispatcher is independent of any window, so it can also be created and dispatched to directly, which is handy for tests.
+
+## Input
+
+Each window also owns an `input::State` that consumes the same events, so you do not need to inspect GLFW directly:
+
+```cpp
+auto* input = window->input();
+
+while (!window->should_close())
+{
+	wplatform::events::poll();
+
+	if (input->key_pressed(wplatform::events::Key::escape))
+		window->request_close();
+
+	if (input->key_down(wplatform::events::Key::left_shift))
+	{
+		const auto cursor = input->cursor();
+		// ...
+	}
+
+	input->new_frame();
+}
+```
+
+`key_down` and `mouse_down` report whether a key or button is currently held, while `key_pressed`, `key_released`, `mouse_pressed`, and `mouse_released` are true only for the frame in which the transition happened. `cursor()` returns the latest position, `scroll_x()` and `scroll_y()` accumulate wheel deltas, and `focused()` and `cursor_inside()` track window focus and cursor entry. Call `new_frame()` once per frame after handling input to clear the one-frame deltas and scroll values; `reset()` clears everything.
+
+`input::State` is independent of windows too: call `handle(event)` with events from any source, which makes it easy to drive from a custom event pump or a test.
 
 Headers are opt-in: include only the modules you use, and only those need to compile in a given translation unit.

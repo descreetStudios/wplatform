@@ -1,6 +1,7 @@
 #include <wplatform/window.hpp>
 
 #include <wplatform/events.hpp>
+#include <wplatform/input.hpp>
 #include <wplatform/platform.hpp>
 
 #include <wcore/log.hpp>
@@ -33,14 +34,21 @@ namespace wplatform::window
 		static_assert(static_cast<i32>(events::MouseButton::middle) == GLFW_MOUSE_BUTTON_MIDDLE);
 		static_assert(static_cast<i32>(events::MouseButton::button_8) == GLFW_MOUSE_BUTTON_8);
 
-		events::Dispatcher* dispatcher_of(GLFWwindow* window) noexcept
+		Window* window_of(GLFWwindow* window) noexcept
 		{
-			return static_cast<events::Dispatcher*>(glfwGetWindowUserPointer(window));
+			return static_cast<Window*>(glfwGetWindowUserPointer(window));
 		}
 
 		void dispatch(GLFWwindow* window, events::Event event)
 		{
-			if (auto* dispatcher = dispatcher_of(window))
+			auto* target{ window_of(window) };
+			if (target == nullptr)
+				return;
+
+			if (auto* input = target->input())
+				input->handle(event);
+
+			if (auto* dispatcher = target->dispatcher())
 				dispatcher->dispatch(event);
 		}
 
@@ -199,10 +207,8 @@ namespace wplatform::window
 				events::FileDropped{ std::move(values) } });
 		}
 
-		void install_callbacks(GLFWwindow* window, events::Dispatcher* dispatcher)
+		void install_callbacks(GLFWwindow* window)
 		{
-			glfwSetWindowUserPointer(window, dispatcher);
-
 			glfwSetWindowCloseCallback(window, on_close);
 			glfwSetWindowFocusCallback(window, on_focus);
 			glfwSetWindowIconifyCallback(window, on_iconify);
@@ -268,21 +274,43 @@ namespace wplatform::window
 			config.title, config.size.width, config.size.height);
 
 		auto dispatcher{ std::make_shared<events::Dispatcher>() };
-		install_callbacks(handle, dispatcher.get());
+		auto input{ std::make_unique<wplatform::input::State>() };
 
-		return Window{ handle, std::move(dispatcher) };
+		input->handle(events::Event{
+			events::Type::focus,
+			events::FocusChanged{
+				glfwGetWindowAttrib(handle, GLFW_FOCUSED) == GLFW_TRUE } });
+
+		double cursorX{ 0.0 };
+		double cursorY{ 0.0 };
+		glfwGetCursorPos(handle, &cursorX, &cursorY);
+		input->handle(events::Event{
+			events::Type::cursor_move,
+			events::CursorMoved{ cursorX, cursorY } });
+
+		install_callbacks(handle);
+
+		return Window{ handle, std::move(dispatcher), std::move(input) };
 	}
 
-	Window::Window(GLFWwindow* handle, std::shared_ptr<events::Dispatcher> dispatcher) noexcept
+	Window::Window(GLFWwindow* handle,
+		std::shared_ptr<events::Dispatcher> dispatcher,
+		std::unique_ptr<wplatform::input::State> input) noexcept
 		: mHandle{ handle }
 		, mDispatcher{ std::move(dispatcher) }
+		, mInput{ std::move(input) }
 	{
+		if (mHandle != nullptr)
+			glfwSetWindowUserPointer(mHandle, this);
 	}
 
 	Window::Window(Window&& other) noexcept
 		: mHandle{ std::exchange(other.mHandle, nullptr) }
 		, mDispatcher{ std::move(other.mDispatcher) }
+		, mInput{ std::move(other.mInput) }
 	{
+		if (mHandle != nullptr)
+			glfwSetWindowUserPointer(mHandle, this);
 	}
 
 	Window& Window::operator=(Window&& other) noexcept
@@ -292,6 +320,10 @@ namespace wplatform::window
 			destroy();
 			mHandle = std::exchange(other.mHandle, nullptr);
 			mDispatcher = std::move(other.mDispatcher);
+			mInput = std::move(other.mInput);
+
+			if (mHandle != nullptr)
+				glfwSetWindowUserPointer(mHandle, this);
 		}
 
 		return *this;
@@ -331,6 +363,16 @@ namespace wplatform::window
 	const events::Dispatcher* Window::dispatcher() const noexcept
 	{
 		return mDispatcher.get();
+	}
+
+	wplatform::input::State* Window::input() noexcept
+	{
+		return mInput.get();
+	}
+
+	const wplatform::input::State* Window::input() const noexcept
+	{
+		return mInput.get();
 	}
 
 	bool Window::should_close() const noexcept

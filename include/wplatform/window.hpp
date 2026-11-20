@@ -14,6 +14,11 @@ namespace wplatform::events
 	class Dispatcher;
 }
 
+namespace wplatform::input
+{
+	class State;
+}
+
 namespace wplatform::window
 {
 	using wplatform::Extent;
@@ -48,6 +53,9 @@ namespace wplatform::window
 		events::Dispatcher* dispatcher() noexcept;
 		const events::Dispatcher* dispatcher() const noexcept;
 
+		wplatform::input::State* input() noexcept;
+		const wplatform::input::State* input() const noexcept;
+
 		bool should_close() const noexcept;
 		void request_close() noexcept;
 
@@ -78,11 +86,14 @@ namespace wplatform::window
 		void set_resizable(bool resizable) noexcept;
 
 	private:
-		explicit Window(GLFWwindow* handle, std::shared_ptr<events::Dispatcher> dispatcher) noexcept;
+		explicit Window(GLFWwindow* handle,
+			std::shared_ptr<events::Dispatcher> dispatcher,
+			std::unique_ptr<wplatform::input::State> input) noexcept;
 
 		void destroy() noexcept;
 
 		GLFWwindow* mHandle{ nullptr };
 		std::shared_ptr<events::Dispatcher> mDispatcher;
+		std::unique_ptr<wplatform::input::State> mInput;
 	};
 } // namespace wplatform::window

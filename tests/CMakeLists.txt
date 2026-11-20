@@ -23,6 +23,7 @@ add_executable(wplatform_tests
 	"dependencies_test.cpp"
 	"platform_test.cpp"
 	"events_test.cpp"
+	"input_test.cpp"
 	"window_test.cpp"
 )
 
