@@ -11,7 +11,7 @@
 
 `wplatform` is a small platform library for C++ projects. It wraps GLFW behind a clean C++20 API: a static library, a single CMake target (`wplatform::wplatform`), and headers under `<wplatform/...>`.
 
-Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor and joystick enumeration with hotplug events, gamepad mappings, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
+Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor and joystick enumeration with hotplug events, gamepad mappings, custom cursors and cursor modes, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
 
 > **Status:** early and evolving. New modules may be added, but the package name, target name, and header layout are intended to remain stable.
 
@@ -95,6 +95,7 @@ target_link_libraries(my_app PRIVATE wplatform::wplatform)
 In both cases the include directories come from the target. Include public headers by their path under `<wplatform/...>`:
 
 ```cpp
+#include <wplatform/cursor.hpp>
 #include <wplatform/events.hpp>
 #include <wplatform/input.hpp>
 #include <wplatform/joystick.hpp>
@@ -280,6 +281,50 @@ window->dispatcher()->add_listener(wplatform::events::Type::joystick_disconnecte
 ```
 
 Joystick state is global rather than per-window, and every query requires an initialized platform on the main thread.
+
+## Cursors
+
+`cursor` creates cursor images without exposing `GLFWcursor`. Standard shapes are the easiest option:
+
+```cpp
+#include <wplatform/cursor.hpp>
+#include <wplatform/window.hpp>
+
+auto cursor = wplatform::cursor::Cursor::create(
+	wplatform::cursor::Shape::pointing_hand);
+
+if (cursor && wplatform::cursor::set(*window, *cursor))
+{
+	// the window now uses the custom cursor
+}
+```
+
+`Shape` covers `arrow`, `ibeam`, `crosshair`, `pointing_hand`, the four diagonal/horizontal/vertical `resize_*` shapes, `resize_all`, and `not_allowed`. `Cursor` is move-only and destroys its native handle when it goes out of scope, so keep it alive while the window uses it. Call `cursor::reset(*window)` to go back to the system default.
+
+For a custom image, fill a `cursor::Image` with tightly packed RGBA8 pixels (top-left origin) and choose a hotspot inside it:
+
+```cpp
+wplatform::cursor::Image image;
+image.size = { 32, 32 };
+image.pixels.assign(32 * 32 * 4, 0);
+// ... draw into image.pixels ...
+
+auto cursor = wplatform::cursor::Cursor::create(image, { 0, 0 });
+```
+
+`Image::valid()` checks that the pixel buffer matches the dimensions. Creation returns `std::nullopt` for invalid images, out-of-bounds hotspots, unsupported shapes, or when the platform is not initialized on the main thread.
+
+Cursor visibility and raw mouse motion are window settings managed through the same module:
+
+```cpp
+wplatform::cursor::set_mode(*window, wplatform::cursor::Mode::hidden);
+// or Mode::normal / Mode::disabled
+
+if (wplatform::cursor::raw_motion_supported())
+	wplatform::cursor::set_raw_motion(*window, true);
+```
+
+`cursor::mode(*window)` and `cursor::raw_motion(*window)` read the current values. Raw mouse motion requires platform support and is most useful with `Mode::disabled`. As with all cursor operations, these calls must happen on the main thread while the platform is initialized.
 
 ## Events
 
