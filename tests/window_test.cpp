@@ -5,6 +5,7 @@
 
 #include <wcore/log.hpp>
 
+#include <array>
 #include <string>
 #include <utility>
 
@@ -151,4 +152,155 @@ TEST_CASE("windows are movable", "[window]")
 	REQUIRE(second->valid());
 	REQUIRE(second->native_handle() == handle);
 	REQUIRE_FALSE(moved.valid());
+}
+
+TEST_CASE("window config applies advanced hints", "[window]")
+{
+	PlatformGuard guard;
+
+	auto config{ make_config() };
+	config.maximized = true;
+	config.floating = true;
+	config.autoIconify = false;
+	config.mousePassthrough = true;
+	config.transparentFramebuffer = true;
+	config.sizeLimits.minWidth = 200;
+	config.sizeLimits.minHeight = 100;
+
+	auto window{ wplatform::window::Window::create(config) };
+	REQUIRE(window.has_value());
+
+	REQUIRE(window->maximized());
+	REQUIRE(window->floating());
+	REQUIRE_FALSE(window->auto_iconify());
+	REQUIRE(window->mouse_passthrough());
+	REQUIRE(window->transparent_framebuffer());
+}
+
+TEST_CASE("window size constraints can be set and cleared", "[window]")
+{
+	PlatformGuard guard;
+
+	auto window{ wplatform::window::Window::create(make_config()) };
+	REQUIRE(window.has_value());
+
+	wplatform::window::SizeLimits limits;
+	limits.minWidth = 100;
+	limits.maxWidth = 800;
+	limits.maxHeight = 600;
+
+	window->set_size_limits(limits);
+	window->clear_size_limits();
+
+	window->set_aspect_ratio(16, 9);
+	window->clear_aspect_ratio();
+}
+
+TEST_CASE("window attributes can be toggled", "[window]")
+{
+	PlatformGuard guard;
+
+	auto window{ wplatform::window::Window::create(make_config()) };
+	REQUIRE(window.has_value());
+
+	REQUIRE_FALSE(window->floating());
+	window->set_floating(true);
+	REQUIRE(window->floating());
+	window->set_floating(false);
+	REQUIRE_FALSE(window->floating());
+
+	REQUIRE(window->auto_iconify());
+	window->set_auto_iconify(false);
+	REQUIRE_FALSE(window->auto_iconify());
+
+	REQUIRE_FALSE(window->mouse_passthrough());
+	window->set_mouse_passthrough(true);
+	REQUIRE(window->mouse_passthrough());
+
+	// Hover depends on the pointer position, so just exercise the query.
+	window->hovered();
+}
+
+TEST_CASE("window icons and opacity can be changed", "[window]")
+{
+	PlatformGuard guard;
+
+	auto window{ wplatform::window::Window::create(make_config()) };
+	REQUIRE(window.has_value());
+
+	wplatform::window::Icon icon;
+	icon.size = { 2, 2 };
+	icon.pixels.assign(2 * 2 * 4, 0);
+	REQUIRE(icon.valid());
+
+	REQUIRE(window->set_icon(icon));
+
+	const std::array<wplatform::window::Icon, 2> icons{ icon, icon };
+	REQUIRE(window->set_icons(icons));
+	REQUIRE(window->set_icons({}));
+
+	REQUIRE(window->opacity() == 1.0f);
+	window->set_opacity(0.5f);
+	REQUIRE(window->opacity() == 0.5f);
+	window->set_opacity(1.0f);
+
+	window->request_attention();
+}
+
+TEST_CASE("windows can switch between windowed and fullscreen", "[window]")
+{
+	PlatformGuard guard;
+
+	auto window{ wplatform::window::Window::create(make_config()) };
+	REQUIRE(window.has_value());
+	REQUIRE_FALSE(window->fullscreen_monitor().has_value());
+
+	const auto primary{ wplatform::monitor::primary() };
+	REQUIRE(primary.has_value());
+
+	const auto mode{ primary->current_mode() };
+	REQUIRE(mode.has_value());
+
+	REQUIRE(window->set_fullscreen(*primary, *mode));
+	const auto active{ window->fullscreen_monitor() };
+	REQUIRE(active.has_value());
+	REQUIRE(*active == *primary);
+	REQUIRE(window->size().width == mode->size.width);
+	REQUIRE(window->size().height == mode->size.height);
+
+	REQUIRE(window->set_windowed({ 20, 30 }, { 400, 300 }));
+	REQUIRE_FALSE(window->fullscreen_monitor().has_value());
+	REQUIRE(window->size().width == 400);
+	REQUIRE(window->size().height == 300);
+}
+
+TEST_CASE("invalid window settings are rejected", "[window]")
+{
+	wcore::log::LogSilencer silence;
+	PlatformGuard guard;
+
+	auto window{ wplatform::window::Window::create(make_config()) };
+	REQUIRE(window.has_value());
+
+	window->set_aspect_ratio(0, 9);
+	window->set_opacity(-0.1f);
+	REQUIRE_FALSE(window->set_icon(wplatform::window::Icon{}));
+
+	const auto primary{ wplatform::monitor::primary() };
+	REQUIRE(primary.has_value());
+	REQUIRE_FALSE(window->set_fullscreen(*primary, wplatform::monitor::VideoMode{}));
+	REQUIRE_FALSE(window->set_fullscreen(
+		wplatform::monitor::Monitor{}, wplatform::monitor::VideoMode{}));
+	REQUIRE_FALSE(window->set_windowed({ 0, 0 }, { 0, 0 }));
+
+	wplatform::window::Window destination{ std::move(*window) };
+	REQUIRE(destination.valid());
+
+	window->clear_size_limits();
+	window->clear_aspect_ratio();
+	window->request_attention();
+	window->set_floating(true);
+	REQUIRE(window->opacity() == 1.0f);
+	REQUIRE_FALSE(window->fullscreen_monitor().has_value());
+	REQUIRE_FALSE(window->set_icon(wplatform::window::Icon{}));
 }

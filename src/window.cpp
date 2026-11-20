@@ -10,6 +10,9 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,6 +78,21 @@ namespace wplatform::window
 				(mods & GLFW_MOD_CAPS_LOCK) != 0,
 				(mods & GLFW_MOD_NUM_LOCK) != 0,
 			};
+		}
+
+		bool in_glfw_range(u32 value) noexcept
+		{
+			return value <= static_cast<u32>(std::numeric_limits<int>::max());
+		}
+
+		bool in_glfw_range(const std::optional<u32>& value) noexcept
+		{
+			return !value.has_value() || in_glfw_range(*value);
+		}
+
+		int to_glfw(const std::optional<u32>& value) noexcept
+		{
+			return value.has_value() ? static_cast<int>(*value) : GLFW_DONT_CARE;
 		}
 
 		void on_close(GLFWwindow* window)
@@ -257,6 +275,12 @@ namespace wplatform::window
 		glfwWindowHint(GLFW_VISIBLE, config.visible ? GLFW_TRUE : GLFW_FALSE);
 		glfwWindowHint(GLFW_DECORATED, config.decorated ? GLFW_TRUE : GLFW_FALSE);
 		glfwWindowHint(GLFW_FOCUSED, config.focused ? GLFW_TRUE : GLFW_FALSE);
+		glfwWindowHint(GLFW_MAXIMIZED, config.maximized ? GLFW_TRUE : GLFW_FALSE);
+		glfwWindowHint(GLFW_FLOATING, config.floating ? GLFW_TRUE : GLFW_FALSE);
+		glfwWindowHint(GLFW_AUTO_ICONIFY, config.autoIconify ? GLFW_TRUE : GLFW_FALSE);
+		glfwWindowHint(GLFW_MOUSE_PASSTHROUGH, config.mousePassthrough ? GLFW_TRUE : GLFW_FALSE);
+		glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER,
+			config.transparentFramebuffer ? GLFW_TRUE : GLFW_FALSE);
 
 		GLFWwindow* handle{ glfwCreateWindow(
 			static_cast<int>(config.size.width),
@@ -294,7 +318,11 @@ namespace wplatform::window
 
 		install_callbacks(handle);
 
-		return Window{ handle, std::move(dispatcher), std::move(input) };
+		Window result{ handle, std::move(dispatcher), std::move(input) };
+		if (config.sizeLimits.any())
+			result.set_size_limits(config.sizeLimits);
+
+		return result;
 	}
 
 	Window::Window(GLFWwindow* handle,
@@ -430,6 +458,71 @@ namespace wplatform::window
 		}
 	}
 
+	void Window::set_size_limits(const SizeLimits& limits) noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: setting size limits requires a valid window");
+			return;
+		}
+
+		if (!in_glfw_range(limits.minWidth) || !in_glfw_range(limits.minHeight)
+			|| !in_glfw_range(limits.maxWidth) || !in_glfw_range(limits.maxHeight))
+		{
+			WCORE_ERROR("wplatform: window size limits are out of range");
+			return;
+		}
+
+		glfwSetWindowSizeLimits(mHandle,
+			to_glfw(limits.minWidth),
+			to_glfw(limits.minHeight),
+			to_glfw(limits.maxWidth),
+			to_glfw(limits.maxHeight));
+	}
+
+	void Window::clear_size_limits() noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: clearing size limits requires a valid window");
+			return;
+		}
+
+		glfwSetWindowSizeLimits(mHandle,
+			GLFW_DONT_CARE, GLFW_DONT_CARE, GLFW_DONT_CARE, GLFW_DONT_CARE);
+	}
+
+	void Window::set_aspect_ratio(u32 numerator, u32 denominator) noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: setting an aspect ratio requires a valid window");
+			return;
+		}
+
+		if (numerator == 0 || denominator == 0
+			|| !in_glfw_range(numerator) || !in_glfw_range(denominator))
+		{
+			WCORE_ERROR("wplatform: invalid window aspect ratio {}x{}",
+				numerator, denominator);
+			return;
+		}
+
+		glfwSetWindowAspectRatio(mHandle,
+			static_cast<int>(numerator), static_cast<int>(denominator));
+	}
+
+	void Window::clear_aspect_ratio() noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: clearing an aspect ratio requires a valid window");
+			return;
+		}
+
+		glfwSetWindowAspectRatio(mHandle, GLFW_DONT_CARE, GLFW_DONT_CARE);
+	}
+
 	Position Window::position() const noexcept
 	{
 		if (mHandle == nullptr)
@@ -483,6 +576,89 @@ namespace wplatform::window
 
 		const std::string value{ title };
 		glfwSetWindowTitle(mHandle, value.c_str());
+	}
+
+	bool Window::set_icons(std::span<const Icon> icons) noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: setting window icons requires a valid window");
+			return false;
+		}
+
+		std::vector<std::vector<u8>> pixels;
+		pixels.reserve(icons.size());
+
+		for (const Icon& icon : icons)
+		{
+			if (!icon.valid())
+			{
+				WCORE_ERROR("wplatform: window icon image does not match its dimensions");
+				return false;
+			}
+
+			pixels.push_back(icon.pixels);
+		}
+
+		std::vector<GLFWimage> native;
+		native.reserve(icons.size());
+
+		for (std::size_t i{ 0 }; i < icons.size(); ++i)
+		{
+			native.push_back(GLFWimage{
+				static_cast<int>(icons[i].size.width),
+				static_cast<int>(icons[i].size.height),
+				pixels[i].data() });
+		}
+
+		glfwSetWindowIcon(mHandle,
+			static_cast<int>(native.size()),
+			native.empty() ? nullptr : native.data());
+		return true;
+	}
+
+	bool Window::set_icon(const Icon& icon) noexcept
+	{
+		return set_icons(std::span<const Icon>{ &icon, 1 });
+	}
+
+	f32 Window::opacity() const noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: querying opacity requires a valid window");
+			return 1.0f;
+		}
+
+		return glfwGetWindowOpacity(mHandle);
+	}
+
+	void Window::set_opacity(f32 opacity) noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: setting opacity requires a valid window");
+			return;
+		}
+
+		if (!std::isfinite(opacity) || opacity < 0.0f || opacity > 1.0f)
+		{
+			WCORE_ERROR("wplatform: window opacity must be between 0 and 1 ({})", opacity);
+			return;
+		}
+
+		glfwSetWindowOpacity(mHandle, opacity);
+	}
+
+	void Window::request_attention() noexcept
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: requesting attention requires a valid window");
+			return;
+		}
+
+		glfwRequestWindowAttention(mHandle);
 	}
 
 	void Window::show() noexcept
@@ -558,5 +734,121 @@ namespace wplatform::window
 			glfwSetWindowAttrib(mHandle, GLFW_RESIZABLE,
 				resizable ? GLFW_TRUE : GLFW_FALSE);
 		}
+	}
+
+	bool Window::hovered() const noexcept
+	{
+		return mHandle != nullptr
+			&& glfwGetWindowAttrib(mHandle, GLFW_HOVERED) == GLFW_TRUE;
+	}
+
+	bool Window::transparent_framebuffer() const noexcept
+	{
+		return mHandle != nullptr
+			&& glfwGetWindowAttrib(mHandle, GLFW_TRANSPARENT_FRAMEBUFFER) == GLFW_TRUE;
+	}
+
+	bool Window::floating() const noexcept
+	{
+		return mHandle != nullptr
+			&& glfwGetWindowAttrib(mHandle, GLFW_FLOATING) == GLFW_TRUE;
+	}
+
+	void Window::set_floating(bool enabled) noexcept
+	{
+		if (mHandle != nullptr)
+		{
+			glfwSetWindowAttrib(mHandle, GLFW_FLOATING,
+				enabled ? GLFW_TRUE : GLFW_FALSE);
+		}
+	}
+
+	bool Window::auto_iconify() const noexcept
+	{
+		return mHandle != nullptr
+			&& glfwGetWindowAttrib(mHandle, GLFW_AUTO_ICONIFY) == GLFW_TRUE;
+	}
+
+	void Window::set_auto_iconify(bool enabled) noexcept
+	{
+		if (mHandle != nullptr)
+		{
+			glfwSetWindowAttrib(mHandle, GLFW_AUTO_ICONIFY,
+				enabled ? GLFW_TRUE : GLFW_FALSE);
+		}
+	}
+
+	bool Window::mouse_passthrough() const noexcept
+	{
+		return mHandle != nullptr
+			&& glfwGetWindowAttrib(mHandle, GLFW_MOUSE_PASSTHROUGH) == GLFW_TRUE;
+	}
+
+	void Window::set_mouse_passthrough(bool enabled) noexcept
+	{
+		if (mHandle != nullptr)
+		{
+			glfwSetWindowAttrib(mHandle, GLFW_MOUSE_PASSTHROUGH,
+				enabled ? GLFW_TRUE : GLFW_FALSE);
+		}
+	}
+
+	std::optional<monitor::Monitor> Window::fullscreen_monitor() const
+	{
+		if (mHandle == nullptr)
+		{
+			WCORE_ERROR("wplatform: querying the fullscreen monitor requires a valid window");
+			return std::nullopt;
+		}
+
+		GLFWmonitor* handle{ glfwGetWindowMonitor(mHandle) };
+		if (handle == nullptr)
+			return std::nullopt;
+
+		return std::optional<monitor::Monitor>{ monitor::Monitor{ handle } };
+	}
+
+	bool Window::set_fullscreen(const monitor::Monitor& target,
+		const monitor::VideoMode& videoMode) noexcept
+	{
+		if (mHandle == nullptr || !target.valid()
+			|| videoMode.size.width == 0 || videoMode.size.height == 0
+			|| !in_glfw_range(videoMode.size.width)
+			|| !in_glfw_range(videoMode.size.height))
+		{
+			WCORE_ERROR("wplatform: entering fullscreen requires a valid window, monitor and video mode");
+			return false;
+		}
+
+		const int refreshRate{ videoMode.refreshRate > 0
+			&& in_glfw_range(videoMode.refreshRate)
+			? static_cast<int>(videoMode.refreshRate)
+			: GLFW_DONT_CARE };
+
+		glfwSetWindowMonitor(mHandle,
+			target.native_handle(),
+			0, 0,
+			static_cast<int>(videoMode.size.width),
+			static_cast<int>(videoMode.size.height),
+			refreshRate);
+		return true;
+	}
+
+	bool Window::set_windowed(Position position, Extent size) noexcept
+	{
+		if (mHandle == nullptr || size.width == 0 || size.height == 0
+			|| !in_glfw_range(size.width) || !in_glfw_range(size.height))
+		{
+			WCORE_ERROR("wplatform: leaving fullscreen requires a valid window and non-zero size");
+			return false;
+		}
+
+		glfwSetWindowMonitor(mHandle,
+			nullptr,
+			position.x, position.y,
+			static_cast<int>(size.width),
+			static_cast<int>(size.height),
+			GLFW_DONT_CARE);
+		return true;
 	}
 } // namespace wplatform::window

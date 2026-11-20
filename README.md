@@ -174,7 +174,7 @@ wplatform::platform::set_error_handler([](const wplatform::platform::Error& erro
 
 Use `backend()`, `backend_name()`, `backend_supported()`, `glfw_version()`, and `glfw_compiled_version()` to inspect the running platform, and `is_main_thread()` to check that calls are made on the thread that initialized it. Call `platform::shutdown()` from that same thread when you are done.
 
-`window::Window::create` also requires the main thread and an initialized platform, and returns `std::nullopt` on failure. Windows are move-only, own their GLFW handle, and are created without a graphics context (`GLFW_NO_API`), leaving rendering setup to you. `native_handle()` exposes the `GLFWwindow*` for interop, and `window::Config` covers the title, initial size, resizability, visibility, decoration, and focus:
+`window::Window::create` also requires the main thread and an initialized platform, and returns `std::nullopt` on failure. Windows are move-only, own their GLFW handle, and are created without a graphics context (`GLFW_NO_API`), leaving rendering setup to you. `native_handle()` exposes the `GLFWwindow*` for interop, and `window::Config` covers the title, initial size, resizability, visibility, decoration, focus, maximization, floating, auto-iconify, mouse passthrough, transparent framebuffer, and initial size limits:
 
 ```cpp
 wplatform::window::Config config;
@@ -185,7 +185,35 @@ config.resizable = false;
 auto window = wplatform::window::Window::create(config);
 ```
 
-A window can be resized, repositioned, shown or hidden, focused, iconified, restored, and maximized; `size()`, `framebuffer_size()`, `position()`, `content_scale()`, `title()`, and the state queries reflect its current status. Destroy all windows before `platform::shutdown()` — keeping them in an inner scope (as in the example above) makes the order automatic.
+A window can be resized, repositioned, shown or hidden, focused, iconified, restored, and maximized; `size()`, `framebuffer_size()`, `position()`, `content_scale()`, `title()`, and the state queries reflect its current status. It also supports size limits, aspect ratio, opacity, icons, and fullscreen switching:
+
+```cpp
+#include <wplatform/monitor.hpp>
+
+wplatform::window::SizeLimits limits;
+limits.minWidth = 640;
+limits.maxWidth = 1920;
+window->set_size_limits(limits);
+window->set_aspect_ratio(16, 9);
+window->set_opacity(0.9f);
+
+wplatform::window::Icon icon;
+icon.size = { 32, 32 };
+icon.pixels.assign(32 * 32 * 4, 0); // RGBA8
+window->set_icon(icon);
+
+const auto display = wplatform::monitor::primary();
+if (display)
+{
+	const auto mode = display->current_mode();
+	if (mode)
+		window->set_fullscreen(*display, *mode);
+}
+
+window->set_windowed({ 100, 100 }, { 1280, 720 });
+```
+
+`clear_size_limits()` and `clear_aspect_ratio()` remove those constraints, `fullscreen_monitor()` reports the current fullscreen display, and `floating()`, `auto_iconify()`, `mouse_passthrough()`, `hovered()`, and `transparent_framebuffer()` expose the remaining attributes with matching `set_*` methods where they can be changed. Destroy all windows before `platform::shutdown()` — keeping them in an inner scope (as in the example above) makes the order automatic.
 
 ## Monitors
 
