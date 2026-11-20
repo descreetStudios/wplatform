@@ -10,6 +10,7 @@
 
 #include <wcore/types.hpp>
 
+#include <wplatform/monitor.hpp>
 #include <wplatform/types.hpp>
 
 namespace wplatform::events
@@ -32,6 +33,8 @@ namespace wplatform::events
 		cursor_enter,
 		scroll,
 		drop,
+		monitor_connected,
+		monitor_disconnected,
 	};
 
 	enum class Action
@@ -281,6 +284,17 @@ namespace wplatform::events
 		std::vector<std::string> paths;
 	};
 
+	struct MonitorConnected
+	{
+		monitor::Monitor handle;
+	};
+
+	struct MonitorDisconnected
+	{
+		monitor::Monitor handle;
+		std::string name;
+	};
+
 	using Payload = std::variant<
 		std::monostate,
 		FocusChanged,
@@ -297,7 +311,9 @@ namespace wplatform::events
 		CursorMoved,
 		CursorEntered,
 		Scrolled,
-		FileDropped>;
+		FileDropped,
+		MonitorConnected,
+		MonitorDisconnected>;
 
 	struct Event
 	{

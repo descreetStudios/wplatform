@@ -6,6 +6,8 @@
 
 #include <wcore/log.hpp>
 
+#include "internal.hpp"
+
 #include <GLFW/glfw3.h>
 
 #include <string>
@@ -275,6 +277,8 @@ namespace wplatform::window
 
 		auto dispatcher{ std::make_shared<events::Dispatcher>() };
 		auto input{ std::make_unique<wplatform::input::State>() };
+
+		events::detail::register_dispatcher(dispatcher);
 
 		input->handle(events::Event{
 			events::Type::focus,

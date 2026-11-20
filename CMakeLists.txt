@@ -23,6 +23,7 @@ target_sources(wplatform PRIVATE
 	"src/platform.cpp"
 	"src/events.cpp"
 	"src/input.cpp"
+	"src/monitor.cpp"
 	"src/window.cpp"
 )
 

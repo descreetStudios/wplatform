@@ -11,7 +11,7 @@
 
 `wplatform` is a small platform library for C++ projects. It wraps GLFW behind a clean C++20 API: a static library, a single CMake target (`wplatform::wplatform`), and headers under `<wplatform/...>`.
 
-Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
+Today it provides platform initialization and backend selection, a move-only RAII window type with an event dispatcher and per-window input state, monitor enumeration with hotplug events, and a version header generated from the CMake project version. The target also carries its dependencies (GLFW, `wcore`, and eventpp), so consumers do not need to fetch them separately.
 
 > **Status:** early and evolving. New modules may be added, but the package name, target name, and header layout are intended to remain stable.
 
@@ -97,6 +97,7 @@ In both cases the include directories come from the target. Include public heade
 ```cpp
 #include <wplatform/events.hpp>
 #include <wplatform/input.hpp>
+#include <wplatform/monitor.hpp>
 #include <wplatform/platform.hpp>
 #include <wplatform/version.hpp>
 #include <wplatform/window.hpp>
@@ -183,6 +184,47 @@ auto window = wplatform::window::Window::create(config);
 
 A window can be resized, repositioned, shown or hidden, focused, iconified, restored, and maximized; `size()`, `framebuffer_size()`, `position()`, `content_scale()`, `title()`, and the state queries reflect its current status. Destroy all windows before `platform::shutdown()` — keeping them in an inner scope (as in the example above) makes the order automatic.
 
+## Monitors
+
+`monitor` exposes the displays attached to the system without leaking GLFW types:
+
+```cpp
+#include <wplatform/monitor.hpp>
+
+for (const auto& display : wplatform::monitor::all())
+{
+	std::cout << display.name() << ": "
+		<< display.work_area().size.width << " x "
+		<< display.work_area().size.height << '\n';
+
+	if (const auto mode = display.current_mode())
+	{
+		// mode->size, mode->refreshRate
+	}
+}
+```
+
+Use `primary()` for the main display, `at({ x, y })` for the display containing a point in screen coordinates, and `count()` for just the number of displays. `Monitor` is a lightweight handle: `valid()` reports whether it is still connected, `name()`, `position()`, `work_area()`, `physical_size()`, and `content_scale()` describe it, and `current_mode()` and `modes()` enumerate supported video modes. `position()` and `work_area()` use screen coordinates. `set_gamma()`, `gamma_ramp()`, and `set_gamma_ramp()` control gamma.
+
+Hotplug changes arrive through the same event dispatchers as window events, on every window:
+
+```cpp
+window->dispatcher()->add_listener(wplatform::events::Type::monitor_connected,
+	[](const wplatform::events::Event& event)
+	{
+		const auto* connected = event.get<wplatform::events::MonitorConnected>();
+	});
+
+window->dispatcher()->add_listener(wplatform::events::Type::monitor_disconnected,
+	[](const wplatform::events::Event& event)
+	{
+		const auto* disconnected = event.get<wplatform::events::MonitorDisconnected>();
+		// disconnected->name remains available after the monitor is gone
+	});
+```
+
+All monitor queries require an initialized platform on the main thread, just like window creation.
+
 ## Events
 
 Every window owns an `events::Dispatcher`. Add listeners for one event type, or without a type to receive everything, then process events once per frame with `events::poll()`:
@@ -229,6 +271,8 @@ An `Event` carries a `Type` and a `std::variant` payload, so `get<T>()` returns 
 | `cursor_enter` | `CursorEntered` |
 | `scroll` | `Scrolled` |
 | `drop` | `FileDropped` |
+| `monitor_connected` | `MonitorConnected` |
+| `monitor_disconnected` | `MonitorDisconnected` |
 
 Keys, mouse buttons, actions, and modifiers are exposed as `events::Key`, `events::MouseButton`, `events::Action`, and `events::Modifiers`, so application code does not depend on GLFW constants. `add_listener` returns a `ListenerId` for `remove_listener`, `clear()` removes every listener, and `has_listeners(type)` queries the dispatcher.
 

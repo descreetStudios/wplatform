@@ -1,8 +1,9 @@
 #include <wplatform/events.hpp>
-
 #include <wplatform/platform.hpp>
 
 #include <wcore/log.hpp>
+
+#include "internal.hpp"
 
 #include <eventpp/callbacklist.h>
 #include <eventpp/eventdispatcher.h>
@@ -12,6 +13,7 @@
 #include <memory>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace wplatform::events
 {
@@ -27,6 +29,8 @@ namespace wplatform::events
 
 		using TypeDispatcher = eventpp::EventDispatcher<Type, void(const Event&), EventTypePolicy>;
 		using AnyDispatcher = eventpp::CallbackList<void(const Event&)>;
+
+		std::vector<std::weak_ptr<Dispatcher>> gDispatchers;
 	} // namespace
 
 	struct Dispatcher::Impl
@@ -122,6 +126,33 @@ namespace wplatform::events
 	{
 		return mImpl->listeners.size();
 	}
+
+	namespace detail
+	{
+		void register_dispatcher(const std::shared_ptr<Dispatcher>& dispatcher)
+		{
+			if (dispatcher)
+				gDispatchers.emplace_back(dispatcher);
+		}
+
+		void broadcast(const Event& event)
+		{
+			for (auto it = gDispatchers.begin(); it != gDispatchers.end();)
+			{
+				if (it->expired())
+					it = gDispatchers.erase(it);
+				else
+					++it;
+			}
+
+			const std::vector<std::weak_ptr<Dispatcher>> snapshot{ gDispatchers };
+			for (const auto& entry : snapshot)
+			{
+				if (const auto dispatcher{ entry.lock() })
+					dispatcher->dispatch(event);
+			}
+		}
+	} // namespace detail
 
 	namespace
 	{
